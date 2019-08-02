@@ -1,15 +1,17 @@
 package main
 
 import (
+	"blogg/documents"
 	"blogg/models"
 	"fmt"
 	"html/template"
 	"math/rand"
 	"net/http"
-	"strconv"
+
+	"gopkg.in/mgo.v2" //использ mongo
 )
 
-var posts map[string]*models.Post
+var postsCollection *mgo.Collection
 
 //==================================================================PARSFILE================================
 var tpl *template.Template
@@ -32,6 +34,14 @@ func init() {
 //==================================================================INDEX================================
 func IndexH(rw http.ResponseWriter, r *http.Request) {
 
+	postDocuments := []documents.PostDocuments{}
+	postsCollection.Find(nil).All(&postDocuments)
+
+	posts := []models.Post{}
+	for _, doc := range postDocuments {
+		post := models.Post{doc.ID, doc.Title, doc.Content}
+		posts = append(posts, post)
+	}
 	err := tpl.ExecuteTemplate(rw, "index", posts)
 	if err != nil {
 		fmt.Printf("ExecuteTemplate INDEX: %s\n", err)
@@ -50,16 +60,19 @@ func WriteH(rw http.ResponseWriter, r *http.Request) {
 
 //==================================================================EDIT================================
 func EditH(rw http.ResponseWriter, r *http.Request) {
-
 	id := r.FormValue("id")
-	post, found := posts[id]
-	if !found {
-		http.NotFound(rw, r)
+	postDocuments := documents.PostDocuments{}
+	err := postsCollection.FindId(id).One(&postDocuments)
+	if err != nil {
+		http.Redirect(rw, r, "/", 302)
+		return
 	}
 
-	err := tpl.ExecuteTemplate(rw, "write", post)
-	if err != nil {
-		fmt.Printf("ExecuteTemplate EDIT: %s\n", err)
+	post := models.Post{postDocuments.ID, postDocuments.Title, postDocuments.Content}
+
+	error := tpl.ExecuteTemplate(rw, "write", post)
+	if error != nil {
+		fmt.Printf("ExecuteTemplate EDIT: %s\n", error)
 	}
 } //==================================================================DELETE================================
 func DeleteH(rw http.ResponseWriter, r *http.Request) {
@@ -69,7 +82,7 @@ func DeleteH(rw http.ResponseWriter, r *http.Request) {
 		http.NotFound(rw, r)
 	}
 
-	delete(posts, id)
+	postsCollection.RemoveId(id)
 
 	http.Redirect(rw, r, "/", 302)
 }
@@ -82,23 +95,31 @@ func SavePostH(rw http.ResponseWriter, r *http.Request) {
 	content := r.FormValue("content")
 	fmt.Printf("%s\n", id)
 
-	var post *models.Post
+	postDocuments := documents.PostDocuments{id, title, content}
 	if id != "" { //проверка на наличие поста
-		post = posts[id]
-		post.Title = title
-		post.Content = content
+		postsCollection.UpdateId(id, postDocuments)
 	} else { //создаем новый пост
-		id := strconv.Itoa(rand.Intn(31))
-		post := models.NewPost(id, title, content)
-		posts[post.ID] = post
+		id := GenerateId()
+		postDocuments.ID = id
+		postsCollection.Insert(postDocuments)
 	}
 
 	http.Redirect(rw, r, "/", 302)
 }
 
+func GenerateId() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)
+}
+
 func main() {
 
-	posts = make(map[string]*models.Post, 0)
+	session, err := mgo.Dial("localhost")
+	if err != nil {
+		fmt.Printf("SESSION MG: %s\n", err)
+	}
+	postsCollection = session.DB("blog").C("posts")
 
 	//для подключения стилей        убираем префикс ""
 	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("./assets/"))))
@@ -113,8 +134,8 @@ func main() {
 
 	http.HandleFunc("/SavePost", SavePostH)
 
-	err := http.ListenAndServe(":3030", nil)
+	error := http.ListenAndServe(":3030", nil)
 	if err != nil {
-		panic(err)
+		fmt.Printf("ListenAndServe: %s\n", error)
 	}
 }
