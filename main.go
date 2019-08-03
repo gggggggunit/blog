@@ -4,11 +4,12 @@ import (
 	"blogg/documents"
 	"blogg/models"
 	"fmt"
+	"github.com/gggggggunit/blog/session"
+	"github.com/gggggggunit/blog/utils"
+	"gopkg.in/mgo.v2" //использ mongo
 	"html/template"
 	"math/rand"
 	"net/http"
-
-	"gopkg.in/mgo.v2" //использ mongo
 )
 
 var postsCollection *mgo.Collection
@@ -24,6 +25,7 @@ func init() {
 		"templates/header.html",
 		"templates/footer.html",
 		"templates/write.html",
+		"templates/login.html",
 	)
 
 	if err != nil {
@@ -107,10 +109,24 @@ func SavePostH(rw http.ResponseWriter, r *http.Request) {
 	http.Redirect(rw, r, "/", 302)
 }
 
-func GenerateId() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	return fmt.Sprintf("%x", b)
+//===================================================================LOGIN==============================
+
+func LoginH(rw http.ResponseWriter, r *http.Request) {
+
+	if r.Method == "GET" {
+		err := tpl.ExecuteTemplate(rw, "login", nil)
+		if err != nil {
+			fmt.Printf("ExecuteTemplate LOGIN: %s\n", err)
+		}
+	}
+	if r.Method == "POST" {
+
+		username := r.FormValue("username")
+		password := r.FormValue("password")
+
+		http.Redirect(rw, r, "/", 302)
+	}
+
 }
 
 func main() {
@@ -133,6 +149,8 @@ func main() {
 	http.HandleFunc("/delete", DeleteH)
 
 	http.HandleFunc("/SavePost", SavePostH)
+
+	http.HandleFunc("/login", LoginH)
 
 	error := http.ListenAndServe(":3030", nil)
 	if err != nil {
