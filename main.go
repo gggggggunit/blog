@@ -3,16 +3,22 @@ package main
 import (
 	"blogg/documents"
 	"blogg/models"
+	"blogg/session"
+	"blogg/utils"
 	"fmt"
-	"github.com/gggggggunit/blog/session"
-	"github.com/gggggggunit/blog/utils"
-	"gopkg.in/mgo.v2" //использ mongo
 	"html/template"
-	"math/rand"
 	"net/http"
+	"time"
+
+	"gopkg.in/mgo.v2" //использ mongo
+)
+
+const (
+	COOKIE_NAME = "sessionId"
 )
 
 var postsCollection *mgo.Collection
+var inMemorySession *session.Session
 
 //==================================================================PARSFILE================================
 var tpl *template.Template
@@ -35,6 +41,14 @@ func init() {
 
 //==================================================================INDEX================================
 func IndexH(rw http.ResponseWriter, r *http.Request) {
+
+	cookie, errr := r.Cookie(COOKIE_NAME)
+	if errr != nil {
+		fmt.Printf("No COOKIE: %s\n", errr)
+	}
+	if cookie != nil {
+		fmt.Printf("USERNAME: %v\n", inMemorySession.Get(cookie.Value))
+	}
 
 	postDocuments := []documents.PostDocuments{}
 	postsCollection.Find(nil).All(&postDocuments)
@@ -101,7 +115,7 @@ func SavePostH(rw http.ResponseWriter, r *http.Request) {
 	if id != "" { //проверка на наличие поста
 		postsCollection.UpdateId(id, postDocuments)
 	} else { //создаем новый пост
-		id := GenerateId()
+		id := utils.GenerateId()
 		postDocuments.ID = id
 		postsCollection.Insert(postDocuments)
 	}
@@ -124,6 +138,18 @@ func LoginH(rw http.ResponseWriter, r *http.Request) {
 		username := r.FormValue("username")
 		password := r.FormValue("password")
 
+		fmt.Printf("Reg: UserName: %v\n    Password: %v ", username, password)
+
+		sessionId := inMemorySession.Init(username)
+
+		cookie := &http.Cookie{
+			Name:    COOKIE_NAME,
+			Value:   sessionId,
+			Expires: time.Now().Add(5 * time.Minute),
+		}
+
+		http.SetCookie(rw, cookie)
+
 		http.Redirect(rw, r, "/", 302)
 	}
 
@@ -131,10 +157,13 @@ func LoginH(rw http.ResponseWriter, r *http.Request) {
 
 func main() {
 
+	inMemorySession = session.NewSession()
+
 	session, err := mgo.Dial("localhost")
 	if err != nil {
 		fmt.Printf("SESSION MG: %s\n", err)
 	}
+
 	postsCollection = session.DB("blog").C("posts")
 
 	//для подключения стилей        убираем префикс ""

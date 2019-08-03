@@ -1,8 +1,7 @@
 package session
 
 import (
-	"fmt"
-	"math/rand"
+	"blogg/utils"
 )
 
 type sessionData struct {
@@ -19,8 +18,8 @@ func NewSession() *Session { //создание сессии
 	return s
 }
 
-func (s *Session) init(username string) string {
-	sessionId := GenerateId()
+func (s *Session) Init(username string) string {
+	sessionId := utils.GenerateId()
 
 	data := &sessionData{Username: username}
 	s.data[sessionId] = data
@@ -28,8 +27,12 @@ func (s *Session) init(username string) string {
 	return sessionId
 }
 
-func GenerateId() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	return fmt.Sprintf("%x", b)
+func (s *Session) Get(sessionId string) string {
+	data := s.data[sessionId]
+
+	if data == nil {
+		return ""
+	}
+
+	return data.Username
 }
